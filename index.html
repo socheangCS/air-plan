@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Plane vs Enemies - Single File</title>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #87CEEB; /* Sky blue */
+            font-family: sans-serif;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            height: 100vh;
+            color: #333;
+        }
+
+        #game-area {
+            width: 100vw;
+            height: 100vh;
+            position: relative;
+            cursor: crosshair;
+        }
+
+        #plane {
+            position: absolute;
+            font-size: 40px;
+            transform-origin: center center;
+            user-select: none;
+            z-index: 10; /* Ensure plane is above enemies/projectiles if overlap visually */
+        }
+
+        .projectile {
+            position: absolute;
+            width: 8px;
+            height: 15px;
+            background-color: red;
+            border-radius: 4px;
+            box-shadow: 0 0 5px yellow;
+            user-select: none;
+            z-index: 5;
+        }
+
+        .enemy {
+            position: absolute;
+            font-size: 30px; /* Adjust for enemy size */
+            user-select: none;
+            z-index: 1;
+            /* Example: add a little animation */
+            /* animation: bobble 2s infinite ease-in-out; */
+        }
+
+        /* Optional enemy animation */
+        /* @keyframes bobble {
+            0%, 100% { transform: translateY(0); }
+            50% { transform: translateY(-5px); }
+        } */
+
+        .controls {
+            position: fixed;
+            bottom: 10px; /* Adjusted for score */
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: rgba(0,0,0,0.7);
+            color: white;
+            padding: 8px 15px;
+            border-radius: 5px;
+            font-size: 13px;
+            text-align: center;
+            z-index: 100;
+        }
+        .controls p {
+            margin: 3px 0;
+        }
+        #score-display {
+            font-weight: bold;
+            font-size: 1.1em;
+        }
+    </style>
+</head>
+<body>
+    <div id="game-area">
+        <div id="plane">✈️</div>
+        <!-- Projectiles & Enemies will be added here by JavaScript -->
+    </div>
+
+    <div class="controls">
+        <p>Arrow Keys: Move & Rotate</p>
+        <p>SPACE or Click: Fire</p>
+        <p id="score-display">Score: 0</p>
+    </div>
+
+    <script>
+        const gameArea = document.getElementById('game-area');
+        const plane = document.getElementById('plane');
+        const scoreDisplay = document.getElementById('score-display');
+
+        // Plane State
+        let planeX = window.innerWidth / 2;
+        let planeY = window.innerHeight / 2;
+        let planeAngle = -90; // Start facing up
+        let planeWidth = 40; // Estimated, will update
+        let planeHeight = 40; // Estimated, will update
+
+        // Control & Physics
+        let currentSpeed = 0;
+        const maxSpeed = 5;
+        const acceleration = 0.1;
+        const deceleration = 0.03;
+        const brakePower = 0.15;
+        const turnSpeed = 3.5;
+        const keysPressed = {};
+
+        // Projectiles
+        const projectiles = [];
+        const projectileSpeed = 10;
+        const projectileWidth = 8;
+        const projectileHeight = 15;
+
+        // Enemies
+        const enemies = [];
+        const enemyTypes = ['👽', '👾', '🛸', '💣', '💀'];
+        const maxEnemies = 5;
+        let lastEnemySpawnTime = 0;
+        const enemySpawnCooldown = 2500; // ms
+        const enemyBaseSpeed = 1;
+        const enemySize = 30; // Approximate for collision
+
+        // Game State
+        let score = 0;
+        let gameOver = false; // Not fully implemented yet, but good to have
+
+        // --- Event Listeners for Controls ---
+        window.addEventListener('keydown', (e) => {
+            if (gameOver) return;
+            keysPressed[e.key] = true;
+            if (e.key.startsWith('Arrow') || e.key === ' ') {
+                e.preventDefault();
+            }
+            if (e.key === ' ') {
+                fireProjectile();
+            }
+        });
+
+        window.addEventListener('keyup', (e) => {
+            if (gameOver) return;
+            keysPressed[e.key] = false;
+        });
+
+        // --- Plane Logic ---
+        function updatePlanePosition() {
+            if (gameOver) return;
+
+            // Rotation
+            if (keysPressed['ArrowLeft']) planeAngle -= turnSpeed;
+            if (keysPressed['ArrowRight']) planeAngle += turnSpeed;
+            planeAngle = (planeAngle + 360) % 360;
+
+            // Speed
+            if (keysPressed['ArrowUp']) {
+                currentSpeed += acceleration;
+                if (currentSpeed > maxSpeed) currentSpeed = maxSpeed;
+            } else if (keysPressed['ArrowDown']) {
+                currentSpeed -= brakePower;
+                if (currentSpeed < 0) currentSpeed = 0;
+            } else {
+                if (currentSpeed > 0) {
+                    currentSpeed -= deceleration;
+                    if (currentSpeed < 0) currentSpeed = 0;
+                }
+            }
+
+            // Movement
+            const rad = planeAngle * (Math.PI / 180);
+            planeX += Math.cos(rad) * currentSpeed;
+            planeY += Math.sin(rad) * currentSpeed;
+
+            // Boundary Wrap
+            if (planeX > window.innerWidth + planeWidth / 2) planeX = -planeWidth / 2;
+            if (planeX < -planeWidth / 2) planeX = window.innerWidth + planeWidth / 2;
+            if (planeY > window.innerHeight + planeHeight / 2) planeY = -planeHeight / 2;
+            if (planeY < -planeHeight / 2) planeY = window.innerHeight + planeHeight / 2;
+
+            plane.style.left = `${planeX - planeWidth / 2}px`;
+            plane.style.top = `${planeY - planeHeight / 2}px`;
+            plane.style.transform = `rotate(${planeAngle}deg)`;
+        }
+
+        // --- Projectile Logic ---
+        function fireProjectile() {
+            if (gameOver) return;
+            const projectile = document.createElement('div');
+            projectile.classList.add('projectile');
+            gameArea.appendChild(projectile);
+
+            const rad = planeAngle * (Math.PI / 180);
+            const noseOffsetX = (planeWidth / 2 + 5) * Math.cos(rad);
+            const noseOffsetY = (planeHeight / 2 + 5) * Math.sin(rad);
+
+            let pX = planeX + noseOffsetX;
+            let pY = planeY + noseOffsetY;
+
+            projectile.style.left = `${pX - projectileWidth / 2}px`;
+            projectile.style.top = `${pY - projectileHeight / 2}px`;
+            projectile.style.transform = `rotate(${planeAngle}deg)`;
+
+            projectiles.push({
+                element: projectile,
+                x: pX, y: pY,
+                angleRad: rad,
+                width: projectileWidth, height: projectileHeight
+            });
+        }
+
+        function updateProjectiles() {
+            for (let i = projectiles.length - 1; i >= 0; i--) {
+                const p = projectiles[i];
+                p.x += Math.cos(p.angleRad) * projectileSpeed;
+                p.y += Math.sin(p.angleRad) * projectileSpeed;
+
+                p.element.style.left = `${p.x - p.width / 2}px`;
+                p.element.style.top = `${p.y - p.height / 2}px`;
+
+                // Collision with enemies
+                for (let j = enemies.length - 1; j >= 0; j--) {
+                    const enemy = enemies[j];
+                    if (checkCollision(p, enemy)) {
+                        destroyEnemy(j);
+                        p.element.remove(); // Remove projectile
+                        projectiles.splice(i, 1);
+                        score += 10;
+                        updateScoreDisplay();
+                        break; // Projectile can only hit one enemy
+                    }
+                }
+
+                // Remove projectile if off-screen and not already removed by collision
+                if (projectiles.includes(p) && (p.x < -p.width || p.x > window.innerWidth + p.width || p.y < -p.height || p.y > window.innerHeight + p.height)) {
+                    p.element.remove();
+                    projectiles.splice(i, 1);
+                }
+            }
+        }
+
+        // --- Enemy Logic ---
+        function spawnEnemy() {
+            if (gameOver || enemies.length >= maxEnemies) return;
+
+            const enemy = document.createElement('div');
+            enemy.classList.add('enemy');
+            enemy.textContent = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
+            gameArea.appendChild(enemy);
+
+            let ex, ey;
+            const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+            switch (edge) {
+                case 0: // Top
+                    ex = Math.random() * window.innerWidth;
+                    ey = -enemySize;
+                    break;
+                case 1: // Right
+                    ex = window.innerWidth + enemySize;
+                    ey = Math.random() * window.innerHeight;
+                    break;
+                case 2: // Bottom
+                    ex = Math.random() * window.innerWidth;
+                    ey = window.innerHeight + enemySize;
+                    break;
+                case 3: // Left
+                    ex = -enemySize;
+                    ey = Math.random() * window.innerHeight;
+                    break;
+            }
+
+            // Simple movement: move towards a point roughly in the center or slightly off
+            const targetX = window.innerWidth / 2 + (Math.random() - 0.5) * (window.innerWidth / 3);
+            const targetY = window.innerHeight / 2 + (Math.random() - 0.5) * (window.innerHeight / 3);
+            const angleToTarget = Math.atan2(targetY - ey, targetX - ex);
+
+            enemies.push({
+                element: enemy,
+                x: ex, y: ey,
+                dx: Math.cos(angleToTarget) * enemyBaseSpeed * (0.8 + Math.random() * 0.4), // Add some speed variation
+                dy: Math.sin(angleToTarget) * enemyBaseSpeed * (0.8 + Math.random() * 0.4),
+                width: enemySize, height: enemySize, // Use fixed enemySize for collision
+            });
+            lastEnemySpawnTime = Date.now();
+        }
+
+        function updateEnemies() {
+            for (let i = enemies.length - 1; i >= 0; i--) {
+                const e = enemies[i];
+                e.x += e.dx;
+                e.y += e.dy;
+
+                e.element.style.left = `${e.x - e.width / 2}px`;
+                e.element.style.top = `${e.y - e.height / 2}px`;
+
+                // Remove enemy if it goes too far off screen (e.g., after crossing)
+                if (e.x < -e.width * 2 || e.x > window.innerWidth + e.width * 2 ||
+                    e.y < -e.height * 2 || e.y > window.innerHeight + e.height * 2) {
+                    destroyEnemy(i); // No points for enemies that just fly away
+                }
+            }
+        }
+
+        function destroyEnemy(index) {
+            if (enemies[index]) {
+                enemies[index].element.remove();
+                enemies.splice(index, 1);
+            }
+        }
+
+        // --- Utility Functions ---
+        function checkCollision(rect1, rect2) {
+            // AABB collision detection (Axis-Aligned Bounding Box)
+            // Assumes x, y are center points
+            return (
+                rect1.x - rect1.width / 2 < rect2.x + rect2.width / 2 &&
+                rect1.x + rect1.width / 2 > rect2.x - rect2.width / 2 &&
+                rect1.y - rect1.height / 2 < rect2.y + rect2.height / 2 &&
+                rect1.y + rect1.height / 2 > rect2.y - rect2.height / 2
+            );
+        }
+
+        function updateScoreDisplay() {
+            scoreDisplay.textContent = `Score: ${score}`;
+        }
+
+        // --- Game Loop ---
+        function gameLoop(timestamp) {
+            if (gameOver) {
+                // Optional: Display "Game Over" message
+                // gameArea.innerHTML += `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:48px; color:red; background:white; padding:20px;">GAME OVER</div>`;
+                return;
+            }
+
+            updatePlanePosition();
+            updateProjectiles();
+            updateEnemies();
+
+            // Spawn new enemies periodically
+            if (Date.now() - lastEnemySpawnTime > enemySpawnCooldown) {
+                spawnEnemy();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        // --- Initialization ---
+        document.addEventListener('DOMContentLoaded', () => {
+            planeWidth = plane.offsetWidth;
+            planeHeight = plane.offsetHeight;
+
+            planeX = window.innerWidth / 2;
+            planeY = window.innerHeight / 2;
+            plane.style.left = `${planeX - planeWidth / 2}px`;
+            plane.style.top = `${planeY - planeHeight / 2}px`;
+            plane.style.transform = `rotate(${planeAngle}deg)`;
+
+            updateScoreDisplay();
+            spawnEnemy(); // Spawn one enemy at the start
+            lastEnemySpawnTime = Date.now();
+
+            // Add firing by click listener
+            gameArea.addEventListener('click', fireProjectile);
+
+            // Start game loop
+            requestAnimationFrame(gameLoop);
+        });
+
+        // Optional: Handle window resize
+        window.addEventListener('resize', () => {
+            // A simple way to handle resize is to just recenter the plane,
+            // or you could make boundaries more dynamic.
+            // For now, we'll just update plane's initial estimated dimensions if needed.
+            if (plane.offsetWidth) planeWidth = plane.offsetWidth;
+            if (plane.offsetHeight) planeHeight = plane.offsetHeight;
+            // You might want to adjust enemy positions or clear them if it causes issues.
+        });
+
+    </script>
+</body>
+</html>

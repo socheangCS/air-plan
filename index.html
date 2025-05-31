@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Plane vs Enemies - Single File</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
+    <title>Plane vs Enemies - Mobile Controls</title>
     <style>
         body {
             margin: 0;
@@ -16,6 +16,7 @@
             justify-content: center;
             height: 100vh;
             color: #333;
+            touch-action: none; /* Prevent default touch actions like pinch-zoom on body */
         }
 
         #game-area {
@@ -27,10 +28,10 @@
 
         #plane {
             position: absolute;
-            font-size: 40px;
+            font-size: 40px; /* Adjust if needed for visibility */
             transform-origin: center center;
             user-select: none;
-            z-index: 10; /* Ensure plane is above enemies/projectiles if overlap visually */
+            z-index: 10;
         }
 
         .projectile {
@@ -46,51 +47,127 @@
 
         .enemy {
             position: absolute;
-            font-size: 30px; /* Adjust for enemy size */
+            font-size: 30px;
             user-select: none;
             z-index: 1;
-            /* Example: add a little animation */
-            /* animation: bobble 2s infinite ease-in-out; */
         }
 
-        /* Optional enemy animation */
-        /* @keyframes bobble {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-5px); }
-        } */
-
-        .controls {
+        .instructions { /* Renamed from .controls to avoid conflict */
             position: fixed;
-            bottom: 10px; /* Adjusted for score */
+            top: 10px; /* Moved to top */
             left: 50%;
             transform: translateX(-50%);
-            background-color: rgba(0,0,0,0.7);
+            background-color: rgba(0,0,0,0.6);
             color: white;
-            padding: 8px 15px;
+            padding: 5px 10px;
             border-radius: 5px;
-            font-size: 13px;
+            font-size: 12px;
             text-align: center;
             z-index: 100;
         }
-        .controls p {
-            margin: 3px 0;
+        .instructions p {
+            margin: 2px 0;
         }
         #score-display {
             font-weight: bold;
             font-size: 1.1em;
         }
+
+        /* --- Mobile Controls --- */
+        #mobile-controls {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            width: 100%;
+            height: auto; /* Adjust height as needed, e.g., 150px */
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-end; /* Align buttons to bottom */
+            padding: 20px;
+            box-sizing: border-box;
+            z-index: 90;
+            pointer-events: none; /* Container itself doesn't block touches */
+        }
+
+        #mobile-controls button {
+            background-color: rgba(255, 255, 255, 0.4);
+            border: 2px solid rgba(0, 0, 0, 0.3);
+            color: rgba(0,0,0,0.7);
+            font-size: 28px; /* Larger font for button symbols */
+            font-weight: bold;
+            border-radius: 50%; /* Circular buttons */
+            width: 65px;
+            height: 65px;
+            margin: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            user-select: none; /* Prevent text selection on tap */
+            -webkit-user-select: none;
+            -webkit-tap-highlight-color: transparent; /* No blue highlight on tap */
+            pointer-events: auto; /* Buttons themselves are touchable */
+            touch-action: manipulation; /* Optimize for button-like interaction */
+        }
+        #mobile-controls button:active {
+            background-color: rgba(200, 200, 200, 0.6);
+        }
+
+
+        .d-pad {
+            display: grid;
+            grid-template-areas:
+                ". up ."
+                "left . right"
+                ". down .";
+            gap: 5px;
+            width: 200px; /* Approx 3x button width + 2x gap */
+            height: 200px;
+        }
+        .d-pad-up { grid-area: up; }
+        .d-pad-left { grid-area: left; }
+        .d-pad-right { grid-area: right; }
+        .d-pad-down { grid-area: down; }
+
+        .action-buttons {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+        }
+        #touch-fire {
+             width: 80px; /* Fire button larger */
+             height: 80px;
+             font-size: 36px;
+        }
+
+        /* Hide mobile controls on non-touch devices by default (optional, JS can also do this) */
+        /* @media (pointer: fine) {
+            #mobile-controls {
+                display: none;
+            }
+        } */
     </style>
 </head>
 <body>
     <div id="game-area">
-        <div id="plane">✈️</div>
-        <!-- Projectiles & Enemies will be added here by JavaScript -->
+        <div id="plane">✈</div>
     </div>
 
-    <div class="controls">
-        <p>Arrow Keys: Move & Rotate</p>
-        <p>SPACE or Click: Fire</p>
+    <div class="instructions">
+        <p>Desktop: Arrow Keys & Space</p>
+        <p>Mobile: On-Screen Buttons</p>
         <p id="score-display">Score: 0</p>
+    </div>
+
+    <div id="mobile-controls">
+        <div class="d-pad">
+            <button id="touch-up" class="d-pad-btn d-pad-up">▲</button>
+            <button id="touch-left" class="d-pad-btn d-pad-left">◀</button>
+            <button id="touch-right" class="d-pad-btn d-pad-right">▶</button>
+            <button id="touch-down" class="d-pad-btn d-pad-down">▼</button>
+        </div>
+        <div class="action-buttons">
+            <button id="touch-fire" class="action-btn">💥</button>
+        </div>
     </div>
 
     <script>
@@ -101,9 +178,9 @@
         // Plane State
         let planeX = window.innerWidth / 2;
         let planeY = window.innerHeight / 2;
-        let planeAngle = -90; // Start facing up
-        let planeWidth = 40; // Estimated, will update
-        let planeHeight = 40; // Estimated, will update
+        let planeAngle = -90;
+        let planeWidth = 40;
+        let planeHeight = 40;
 
         // Control & Physics
         let currentSpeed = 0;
@@ -113,6 +190,12 @@
         const brakePower = 0.15;
         const turnSpeed = 3.5;
         const keysPressed = {};
+        const touchControls = { // For mobile touch buttons
+            left: false,
+            right: false,
+            up: false,
+            down: false
+        };
 
         // Projectiles
         const projectiles = [];
@@ -125,15 +208,15 @@
         const enemyTypes = ['👽', '👾', '🛸', '💣', '💀'];
         const maxEnemies = 5;
         let lastEnemySpawnTime = 0;
-        const enemySpawnCooldown = 2500; // ms
+        const enemySpawnCooldown = 2500;
         const enemyBaseSpeed = 1;
-        const enemySize = 30; // Approximate for collision
+        const enemySize = 30;
 
         // Game State
         let score = 0;
-        let gameOver = false; // Not fully implemented yet, but good to have
+        let gameOver = false;
 
-        // --- Event Listeners for Controls ---
+        // --- Event Listeners for Keyboard Controls ---
         window.addEventListener('keydown', (e) => {
             if (gameOver) return;
             keysPressed[e.key] = true;
@@ -150,20 +233,53 @@
             keysPressed[e.key] = false;
         });
 
-        // --- Plane Logic ---
+        // --- Event Listeners for Touch Controls ---
+        function setupTouchButton(buttonId, controlKey) {
+            const button = document.getElementById(buttonId);
+            if (button) {
+                button.addEventListener('touchstart', (e) => {
+                    e.preventDefault(); // Prevent default touch actions (scroll, zoom)
+                    if (gameOver) return;
+                    touchControls[controlKey] = true;
+                }, { passive: false }); // passive: false needed for preventDefault
+
+                button.addEventListener('touchend', (e) => {
+                    e.preventDefault();
+                    if (gameOver) return;
+                    touchControls[controlKey] = false;
+                }, { passive: false });
+
+                button.addEventListener('touchcancel', (e) => { // Handle if touch is interrupted
+                    e.preventDefault();
+                    if (gameOver) return;
+                    touchControls[controlKey] = false;
+                }, { passive: false });
+            }
+        }
+
+        const fireButton = document.getElementById('touch-fire');
+        if (fireButton) {
+            fireButton.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                if (gameOver) return;
+                fireProjectile();
+            }, { passive: false });
+        }
+
+        // --- Plane Logic (integrates keyboard and touch) ---
         function updatePlanePosition() {
             if (gameOver) return;
 
             // Rotation
-            if (keysPressed['ArrowLeft']) planeAngle -= turnSpeed;
-            if (keysPressed['ArrowRight']) planeAngle += turnSpeed;
+            if (keysPressed['ArrowLeft'] || touchControls.left) planeAngle -= turnSpeed;
+            if (keysPressed['ArrowRight'] || touchControls.right) planeAngle += turnSpeed;
             planeAngle = (planeAngle + 360) % 360;
 
             // Speed
-            if (keysPressed['ArrowUp']) {
+            if (keysPressed['ArrowUp'] || touchControls.up) {
                 currentSpeed += acceleration;
                 if (currentSpeed > maxSpeed) currentSpeed = maxSpeed;
-            } else if (keysPressed['ArrowDown']) {
+            } else if (keysPressed['ArrowDown'] || touchControls.down) {
                 currentSpeed -= brakePower;
                 if (currentSpeed < 0) currentSpeed = 0;
             } else {
@@ -173,12 +289,10 @@
                 }
             }
 
-            // Movement
             const rad = planeAngle * (Math.PI / 180);
             planeX += Math.cos(rad) * currentSpeed;
             planeY += Math.sin(rad) * currentSpeed;
 
-            // Boundary Wrap
             if (planeX > window.innerWidth + planeWidth / 2) planeX = -planeWidth / 2;
             if (planeX < -planeWidth / 2) planeX = window.innerWidth + planeWidth / 2;
             if (planeY > window.innerHeight + planeHeight / 2) planeY = -planeHeight / 2;
@@ -197,21 +311,20 @@
             gameArea.appendChild(projectile);
 
             const rad = planeAngle * (Math.PI / 180);
-            const noseOffsetX = (planeWidth / 2 + 5) * Math.cos(rad);
-            const noseOffsetY = (planeHeight / 2 + 5) * Math.sin(rad);
+            const distanceFromCenterToNoseTip = (planeWidth / 2) + 7;
+            const actualNoseOffsetX = distanceFromCenterToNoseTip * Math.cos(rad);
+            const actualNoseOffsetY = distanceFromCenterToNoseTip * Math.sin(rad);
 
-            let pX = planeX + noseOffsetX;
-            let pY = planeY + noseOffsetY;
+            let pX = planeX + actualNoseOffsetX;
+            let pY = planeY + actualNoseOffsetY;
 
             projectile.style.left = `${pX - projectileWidth / 2}px`;
             projectile.style.top = `${pY - projectileHeight / 2}px`;
             projectile.style.transform = `rotate(${planeAngle}deg)`;
 
             projectiles.push({
-                element: projectile,
-                x: pX, y: pY,
-                angleRad: rad,
-                width: projectileWidth, height: projectileHeight
+                element: projectile, x: pX, y: pY,
+                angleRad: rad, width: projectileWidth, height: projectileHeight
             });
         }
 
@@ -224,20 +337,18 @@
                 p.element.style.left = `${p.x - p.width / 2}px`;
                 p.element.style.top = `${p.y - p.height / 2}px`;
 
-                // Collision with enemies
                 for (let j = enemies.length - 1; j >= 0; j--) {
                     const enemy = enemies[j];
                     if (checkCollision(p, enemy)) {
                         destroyEnemy(j);
-                        p.element.remove(); // Remove projectile
+                        p.element.remove();
                         projectiles.splice(i, 1);
                         score += 10;
                         updateScoreDisplay();
-                        break; // Projectile can only hit one enemy
+                        break;
                     }
                 }
 
-                // Remove projectile if off-screen and not already removed by collision
                 if (projectiles.includes(p) && (p.x < -p.width || p.x > window.innerWidth + p.width || p.y < -p.height || p.y > window.innerHeight + p.height)) {
                     p.element.remove();
                     projectiles.splice(i, 1);
@@ -248,44 +359,29 @@
         // --- Enemy Logic ---
         function spawnEnemy() {
             if (gameOver || enemies.length >= maxEnemies) return;
-
             const enemy = document.createElement('div');
             enemy.classList.add('enemy');
             enemy.textContent = enemyTypes[Math.floor(Math.random() * enemyTypes.length)];
             gameArea.appendChild(enemy);
 
             let ex, ey;
-            const edge = Math.floor(Math.random() * 4); // 0: top, 1: right, 2: bottom, 3: left
+            const edge = Math.floor(Math.random() * 4);
             switch (edge) {
-                case 0: // Top
-                    ex = Math.random() * window.innerWidth;
-                    ey = -enemySize;
-                    break;
-                case 1: // Right
-                    ex = window.innerWidth + enemySize;
-                    ey = Math.random() * window.innerHeight;
-                    break;
-                case 2: // Bottom
-                    ex = Math.random() * window.innerWidth;
-                    ey = window.innerHeight + enemySize;
-                    break;
-                case 3: // Left
-                    ex = -enemySize;
-                    ey = Math.random() * window.innerHeight;
-                    break;
+                case 0: ex = Math.random() * window.innerWidth; ey = -enemySize; break;
+                case 1: ex = window.innerWidth + enemySize; ey = Math.random() * window.innerHeight; break;
+                case 2: ex = Math.random() * window.innerWidth; ey = window.innerHeight + enemySize; break;
+                case 3: ex = -enemySize; ey = Math.random() * window.innerHeight; break;
             }
 
-            // Simple movement: move towards a point roughly in the center or slightly off
             const targetX = window.innerWidth / 2 + (Math.random() - 0.5) * (window.innerWidth / 3);
             const targetY = window.innerHeight / 2 + (Math.random() - 0.5) * (window.innerHeight / 3);
             const angleToTarget = Math.atan2(targetY - ey, targetX - ex);
 
             enemies.push({
-                element: enemy,
-                x: ex, y: ey,
-                dx: Math.cos(angleToTarget) * enemyBaseSpeed * (0.8 + Math.random() * 0.4), // Add some speed variation
+                element: enemy, x: ex, y: ey,
+                dx: Math.cos(angleToTarget) * enemyBaseSpeed * (0.8 + Math.random() * 0.4),
                 dy: Math.sin(angleToTarget) * enemyBaseSpeed * (0.8 + Math.random() * 0.4),
-                width: enemySize, height: enemySize, // Use fixed enemySize for collision
+                width: enemySize, height: enemySize,
             });
             lastEnemySpawnTime = Date.now();
         }
@@ -295,14 +391,11 @@
                 const e = enemies[i];
                 e.x += e.dx;
                 e.y += e.dy;
-
                 e.element.style.left = `${e.x - e.width / 2}px`;
                 e.element.style.top = `${e.y - e.height / 2}px`;
-
-                // Remove enemy if it goes too far off screen (e.g., after crossing)
                 if (e.x < -e.width * 2 || e.x > window.innerWidth + e.width * 2 ||
                     e.y < -e.height * 2 || e.y > window.innerHeight + e.height * 2) {
-                    destroyEnemy(i); // No points for enemies that just fly away
+                    destroyEnemy(i);
                 }
             }
         }
@@ -316,8 +409,6 @@
 
         // --- Utility Functions ---
         function checkCollision(rect1, rect2) {
-            // AABB collision detection (Axis-Aligned Bounding Box)
-            // Assumes x, y are center points
             return (
                 rect1.x - rect1.width / 2 < rect2.x + rect2.width / 2 &&
                 rect1.x + rect1.width / 2 > rect2.x - rect2.width / 2 &&
@@ -332,29 +423,20 @@
 
         // --- Game Loop ---
         function gameLoop(timestamp) {
-            if (gameOver) {
-                // Optional: Display "Game Over" message
-                // gameArea.innerHTML += `<div style="position:absolute; top:50%; left:50%; transform:translate(-50%,-50%); font-size:48px; color:red; background:white; padding:20px;">GAME OVER</div>`;
-                return;
-            }
-
+            if (gameOver) return;
             updatePlanePosition();
             updateProjectiles();
             updateEnemies();
-
-            // Spawn new enemies periodically
             if (Date.now() - lastEnemySpawnTime > enemySpawnCooldown) {
                 spawnEnemy();
             }
-
             requestAnimationFrame(gameLoop);
         }
 
         // --- Initialization ---
         document.addEventListener('DOMContentLoaded', () => {
-            planeWidth = plane.offsetWidth;
-            planeHeight = plane.offsetHeight;
-
+            planeWidth = plane.offsetWidth || 40;
+            planeHeight = plane.offsetHeight || 40;
             planeX = window.innerWidth / 2;
             planeY = window.innerHeight / 2;
             plane.style.left = `${planeX - planeWidth / 2}px`;
@@ -362,26 +444,42 @@
             plane.style.transform = `rotate(${planeAngle}deg)`;
 
             updateScoreDisplay();
-            spawnEnemy(); // Spawn one enemy at the start
+            spawnEnemy();
             lastEnemySpawnTime = Date.now();
 
-            // Add firing by click listener
-            gameArea.addEventListener('click', fireProjectile);
+            gameArea.addEventListener('click', (e) => {
+                // Only fire if click is not on a mobile control button
+                if (!e.target.closest('#mobile-controls')) {
+                    fireProjectile();
+                }
+            });
 
-            // Start game loop
+            // Setup touch controls
+            setupTouchButton('touch-left', 'left');
+            setupTouchButton('touch-right', 'right');
+            setupTouchButton('touch-up', 'up');
+            setupTouchButton('touch-down', 'down');
+
+            // Conditionally show mobile controls (simple check)
+            const mobileControlsElement = document.getElementById('mobile-controls');
+            if ('ontouchstart' in window || navigator.maxTouchPoints > 0) {
+                // It's likely a touch device
+            } else {
+                // Likely not a touch device, hide mobile controls
+                 if(mobileControlsElement) mobileControlsElement.style.display = 'none';
+            }
+
+
             requestAnimationFrame(gameLoop);
         });
 
-        // Optional: Handle window resize
         window.addEventListener('resize', () => {
-            // A simple way to handle resize is to just recenter the plane,
-            // or you could make boundaries more dynamic.
-            // For now, we'll just update plane's initial estimated dimensions if needed.
             if (plane.offsetWidth) planeWidth = plane.offsetWidth;
             if (plane.offsetHeight) planeHeight = plane.offsetHeight;
-            // You might want to adjust enemy positions or clear them if it causes issues.
+            // Could also reset plane position on resize if desired
+            // planeX = window.innerWidth / 2;
+            // planeY = window.innerHeight / 2;
         });
-
     </script>
 </body>
 </html>
